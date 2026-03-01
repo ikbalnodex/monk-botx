@@ -210,4 +210,4 @@ MIT License - see [LICENSE](LICENSE) file.
 
 ## Disclaimer
 
-This bot is for informational purposes only. Not financial advice. Trade at your own risk.
+This bot is for informational purposes only. Not financial advice. Trade at your own risk. :}
