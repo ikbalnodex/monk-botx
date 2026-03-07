@@ -71,6 +71,8 @@ class PricePoint(NamedTuple):
     timestamp: datetime
     btc:       Decimal
     eth:       Decimal
+    sol:       Optional[Decimal] = None
+    bnb:       Optional[Decimal] = None
 
 
 class PriceData(NamedTuple):
@@ -143,6 +145,8 @@ scan_stats = {
     "count":          0,
     "last_btc_price": None,
     "last_eth_price": None,
+    "last_sol_price": None,
+    "last_bnb_price": None,
     "last_btc_ret":   None,
     "last_eth_ret":   None,
     "last_gap":       None,
@@ -216,6 +220,15 @@ def load_history() -> None:
                 if k in p: return p[k]
             raise KeyError(f"No ETH key in {list(p.keys())}")
 
+        def _get_optional(p: dict, keys: tuple):
+            for k in keys:
+                if k in p:
+                    try:
+                        return Decimal(str(p[k]))
+                    except InvalidOperation:
+                        return None
+            return None
+
         loaded = []
         for p in data:
             try:
@@ -226,11 +239,20 @@ def load_history() -> None:
                     timestamp=ts,
                     btc=Decimal(str(_get_btc(p))),
                     eth=Decimal(str(_get_eth(p))),
+                    sol=_get_optional(p, ("SOL", "sol", "sol_price")),
+                    bnb=_get_optional(p, ("BNB", "bnb", "bnb_price")),
                 ))
             except (KeyError, InvalidOperation) as e:
                 logger.warning(f"Skipping malformed entry: {e}")
                 continue
         price_history = loaded
+        # Update scan_stats dengan harga terbaru dari Redis
+        if price_history:
+            latest = price_history[-1]
+            scan_stats["last_btc_price"] = latest.btc
+            scan_stats["last_eth_price"] = latest.eth
+            scan_stats["last_sol_price"] = latest.sol
+            scan_stats["last_bnb_price"] = latest.bnb
         logger.info(f"Loaded {len(price_history)} points from Redis (read-only)")
     except Exception as e:
         logger.warning(f"Failed to load history from Redis: {e}")
@@ -820,6 +842,22 @@ def handle_status_command(reply_chat: str) -> None:
         last_redis_refresh.strftime("%H:%M:%S UTC")
         if last_redis_refresh else "Belum~"
     )
+    sol_str = (
+        f"${float(scan_stats['last_sol_price']):,.2f}"
+        if scan_stats["last_sol_price"] else "N/A"
+    )
+    bnb_str = (
+        f"${float(scan_stats['last_bnb_price']):,.2f}"
+        if scan_stats["last_bnb_price"] else "N/A"
+    )
+    btc_now_str = (
+        f"${float(scan_stats['last_btc_price']):,.2f}"
+        if scan_stats["last_btc_price"] else "N/A"
+    )
+    eth_now_str = (
+        f"${float(scan_stats['last_eth_price']):,.2f}"
+        if scan_stats["last_eth_price"] else "N/A"
+    )
     message = (
         "📊 *Status sekarang~*\n"
         "\n"
@@ -830,6 +868,14 @@ def handle_status_command(reply_chat: str) -> None:
         f"Lookback: {lookback}h\n"
         f"History: {ready}\n"
         f"Data Points: {len(price_history)}\n"
+        "\n"
+        "*Harga terakhir:*\n"
+        "┌─────────────────────\n"
+        f"│ BTC: {btc_now_str}\n"
+        f"│ ETH: {eth_now_str}\n"
+        f"│ SOL: {sol_str}\n"
+        f"│ BNB: {bnb_str}\n"
+        "└─────────────────────\n"
         f"Redis refresh: {last_refresh_str} 🔒\n"
     )
     send_reply(message, reply_chat)
@@ -1211,7 +1257,9 @@ def build_heartbeat_message(cfg: dict) -> str:
         f"┌─────────────────────\n"
         f"│ BTC: {btc_str}\n"
         f"│ ETH: {eth_str}\n"
-        f"│ Gap: {gap_str}\n"
+        f"│ SOL: {sol_str}\n"
+        f"│ BNB: {bnb_str}\n"
+        f"│ Gap BTC/ETH ({lb}): {gap_str}\n"
         f"{peak_line}"
         f"{track_lines}"
         f"└─────────────────────\n"
