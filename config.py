@@ -3,34 +3,34 @@ Configuration for Monk Bot - BTC/ETH Divergence Alert Bot
 """
 import os
 import logging
-
 # =============================================================================
 # Environment Variables
 # =============================================================================
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
-
+# =============================================================================
+# Upstash Redis (untuk persistent history — read-only di Bot B)
+# =============================================================================
+UPSTASH_REDIS_URL   = os.environ.get("UPSTASH_REDIS_REST_URL", "")
+UPSTASH_REDIS_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN", "")
 # =============================================================================
 # API Configuration
 # =============================================================================
 API_BASE_URL = "https://omni-client-api.prod.ap-northeast-1.variational.io"
 API_ENDPOINT = "/metadata/stats"
-
 # =============================================================================
 # Timing Configuration (in minutes unless noted)
 # =============================================================================
 SCAN_INTERVAL_SECONDS = 180      # 3 minutes
 TRACK_INTERVAL_SECONDS = 180     # 3 minutes
 FRESHNESS_THRESHOLD_MINUTES = 10
-
 # =============================================================================
 # Strategy Thresholds (percentage points)
 # =============================================================================
 ENTRY_THRESHOLD = 2.0
 EXIT_THRESHOLD = 0.15
 INVALIDATION_THRESHOLD = 4.0
-
 # =============================================================================
 # Logging Setup
 # =============================================================================
