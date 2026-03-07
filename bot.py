@@ -1199,6 +1199,14 @@ def build_heartbeat_message(cfg: dict) -> str:
         f"${float(scan_stats['last_eth_price']):,.2f}{eth_ret_str}"
         if scan_stats["last_eth_price"] else "N/A"
     )
+    sol_str = (
+        f"${float(scan_stats['last_sol_price']):,.2f}"
+        if scan_stats["last_sol_price"] else "N/A"
+    )
+    bnb_str = (
+        f"${float(scan_stats['last_bnb_price']):,.2f}"
+        if scan_stats["last_bnb_price"] else "N/A"
+    )
     gap_str       = (
         f"{format_value(scan_stats['last_gap'])}%"
         if scan_stats["last_gap"] is not None else "N/A"
