@@ -191,16 +191,45 @@ def load_history() -> None:
             logger.info("No history in Redis yet (Bot A belum write?)")
             return
         data = json.loads(result["result"])
+        if not data:
+            logger.info("Redis data empty")
+            return
+
+        # Log sample entry agar mudah debug field names
+        sample = data[0]
+        logger.info(f"Redis sample entry keys: {list(sample.keys())}")
+        logger.info(f"Redis sample entry: {sample}")
+
+        # Flexible key mapping
+        def _get_ts(p):
+            for k in ("timestamp", "ts", "time", "datetime"):
+                if k in p: return p[k]
+            raise KeyError(f"No timestamp key in {list(p.keys())}")
+
+        def _get_btc(p):
+            for k in ("btc", "btc_price", "BTC", "bitcoin"):
+                if k in p: return p[k]
+            raise KeyError(f"No BTC key in {list(p.keys())}")
+
+        def _get_eth(p):
+            for k in ("eth", "eth_price", "ETH", "ethereum"):
+                if k in p: return p[k]
+            raise KeyError(f"No ETH key in {list(p.keys())}")
+
         loaded = []
         for p in data:
-            ts = parse_iso_timestamp(p["timestamp"])
-            if ts is None:
-                continue  # skip malformed timestamp, jangan crash seluruh load
-            loaded.append(PricePoint(
-                timestamp=ts,
-                btc=Decimal(p["btc"]),
-                eth=Decimal(p["eth"]),
-            ))
+            try:
+                ts = parse_iso_timestamp(_get_ts(p))
+                if ts is None:
+                    continue
+                loaded.append(PricePoint(
+                    timestamp=ts,
+                    btc=Decimal(str(_get_btc(p))),
+                    eth=Decimal(str(_get_eth(p))),
+                ))
+            except (KeyError, InvalidOperation) as e:
+                logger.warning(f"Skipping malformed entry: {e}")
+                continue
         price_history = loaded
         logger.info(f"Loaded {len(price_history)} points from Redis (read-only)")
     except Exception as e:
