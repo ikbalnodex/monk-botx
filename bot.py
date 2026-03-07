@@ -191,14 +191,17 @@ def load_history() -> None:
             logger.info("No history in Redis yet (Bot A belum write?)")
             return
         data = json.loads(result["result"])
-        price_history = [
-            PricePoint(
-                timestamp=datetime.fromisoformat(p["timestamp"]),
+        loaded = []
+        for p in data:
+            ts = parse_iso_timestamp(p["timestamp"])
+            if ts is None:
+                continue  # skip malformed timestamp, jangan crash seluruh load
+            loaded.append(PricePoint(
+                timestamp=ts,
                 btc=Decimal(p["btc"]),
                 eth=Decimal(p["eth"]),
-            )
-            for p in data
-        ]
+            ))
+        price_history = loaded
         logger.info(f"Loaded {len(price_history)} points from Redis (read-only)")
     except Exception as e:
         logger.warning(f"Failed to load history from Redis: {e}")
@@ -357,7 +360,7 @@ def handle_settings_command(reply_chat: str) -> None:
     rr     = cfg["redis_refresh_minutes"]
     rr_str = f"{rr} menit" if rr > 0 else "Off"
     message = (
-        "⚙️ *Ara ara~ mau lihat settingan yang sudah Akeno jaga baik-baik?* Ufufufu...\n"
+        "⚙️ *Ini semua settingan yang Aku jaga buat Sensei~*\n"
         "\n"
         f"📊 Scan Interval: {cfg['scan_interval']}s ({cfg['scan_interval'] // 60} menit)\n"
         f"🕐 Lookback: {cfg['lookback_hours']}h\n"
@@ -373,7 +376,7 @@ def handle_settings_command(reply_chat: str) -> None:
         "\n"
         "*Command yang tersedia:*\n"
         "`/interval`, `/lookback`, `/heartbeat`, `/threshold`, `/peak`, `/sltp`\n"
-        "`/help` — Akeno jelaskan semuanya untukmu~ (◕‿◕)"
+        "`/help` — Aku jelaskan semuanya buat Sensei~ ( ♡ 。-(｡･ω･) ♡)"
     )
     send_reply(message, reply_chat)
 
@@ -381,7 +384,7 @@ def handle_settings_command(reply_chat: str) -> None:
 def handle_interval_command(args: list, reply_chat: str) -> None:
     if not args:
         send_reply(
-            "Ara ara~ angkanya mana, sayangku? (◕ω◕)\n"
+            "Sensei~ angkanya mana? ( ･ω･)\n"
             "Contoh: `/interval 60`",
             reply_chat
         )
@@ -390,13 +393,13 @@ def handle_interval_command(args: list, reply_chat: str) -> None:
         new_interval = int(args[0])
         if new_interval < 60:
             send_reply(
-                "Ufufufu... itu terlalu cepat, sayangku~ Minimal 60 detik ya. (◕‿◕)",
+                "Itu terlalu cepat, Sensei~ Minimal 60 detik ya. (｡•́︿•̀｡)",
                 reply_chat
             )
             return
         if new_interval > 3600:
             send_reply(
-                "Ara ara~ terlalu lama. Maksimal 3600 detik saja ya. Ufufufu... (◕ω◕)",
+                "Terlalu lama, Sensei~ Maksimal 3600 detik saja ya. ( ･ω･)",
                 reply_chat
             )
             return
@@ -404,19 +407,19 @@ def handle_interval_command(args: list, reply_chat: str) -> None:
         with settings_lock:
             settings["scan_interval"] = new_interval
         send_reply(
-            f"Baik~ Akeno akan scan setiap *{new_interval} detik* "
-            f"({new_interval // 60} menit). Ara ara~ (◕‿◕)",
+            f"Siap, Sensei~ Aku akan scan setiap *{new_interval} detik* "
+            f"({new_interval // 60} menit). ( ♡ 。-(｡･ω･) ♡)",
             reply_chat
         )
         logger.info(f"Scan interval changed to {new_interval}s")
     except ValueError:
-        send_reply("Ara ara~ angkanya tidak valid, sayangku. (◕ω◕)", reply_chat)
+        send_reply("Angkanya tidak valid, Sensei. ( ･ω･)", reply_chat)
 
 
 def handle_threshold_command(args: list, reply_chat: str) -> None:
     if len(args) < 2:
         send_reply(
-            "Ufufufu... perintahnya kurang lengkap~ (◕‿◕)\n"
+            "Perintahnya kurang lengkap, Sensei~ ( ･ω･)\n"
             "`/threshold entry <nilai>`\n"
             "`/threshold exit <nilai>`\n"
             "`/threshold invalid <nilai>`",
@@ -427,7 +430,7 @@ def handle_threshold_command(args: list, reply_chat: str) -> None:
         threshold_type = args[0].lower()
         value          = float(args[1])
         if value <= 0 or value > 20:
-            send_reply("Ara ara~ harus antara 0 sampai 20~ (◕ω◕)", reply_chat)
+            send_reply("Harus antara 0 sampai 20, Sensei~ ( ･ω･)", reply_chat)
             return
         # FIX: wrap write dalam lock
         with settings_lock:
@@ -439,30 +442,30 @@ def handle_threshold_command(args: list, reply_chat: str) -> None:
                 settings["invalidation_threshold"] = value
             else:
                 send_reply(
-                    "Ara ara~ gunakan `entry`, `exit`, atau `invalid` ya~ (◕‿◕)",
+                    "Gunakan `entry`, `exit`, atau `invalid` ya, Sensei~ ( ･ω･)",
                     reply_chat
                 )
                 return
 
         if threshold_type == "entry":
             send_reply(
-                f"Ufufufu... Entry threshold jadi *±{value}%*~ (◕‿◕)",
+                f"Entry threshold sekarang *±{value}%*~ Siap, Sensei! ( ♡ 。-(｡･ω･) ♡)",
                 reply_chat
             )
         elif threshold_type == "exit":
             send_reply(
-                f"Ara ara~ Exit threshold sekarang *±{value}%*.\n"
-                f"_TP otomatis ikut berubah ke level ini ya sayangku~ ✨_",
+                f"Exit threshold sekarang *±{value}%*.\n"
+                f"_TP otomatis ikut berubah ke level ini ya, Sensei~ ✨_",
                 reply_chat
             )
         elif threshold_type in ("invalid", "invalidation"):
             send_reply(
-                f"Ufufufu... Invalidation jadi *±{value}%*. (◕ω◕)",
+                f"Invalidation sekarang *±{value}%*. Siap, Sensei~ ( ･ω･)",
                 reply_chat
             )
         logger.info(f"Threshold {threshold_type} changed to {value}")
     except ValueError:
-        send_reply("Ara ara~ angkanya tidak valid, sayangku. (◕ω◕)", reply_chat)
+        send_reply("Angkanya tidak valid, Sensei. ( ･ω･)", reply_chat)
 
 
 def handle_peak_command(args: list, reply_chat: str) -> None:
@@ -470,7 +473,7 @@ def handle_peak_command(args: list, reply_chat: str) -> None:
         with settings_lock:
             current_val = settings["peak_reversal"]
         send_reply(
-            f"🎯 Peak reversal sekarang *{current_val}%*~ Ufufufu...\n\n"
+            f"🎯 Peak reversal sekarang *{current_val}%*~\n\n"
             "Usage: `/peak <nilai>`\n"
             "Contoh: `/peak 0.3`",
             reply_chat
@@ -479,19 +482,19 @@ def handle_peak_command(args: list, reply_chat: str) -> None:
     try:
         value = float(args[0])
         if value <= 0 or value > 2.0:
-            send_reply("Ara ara~ harus antara 0 sampai 2.0~ (◕ω◕)", reply_chat)
+            send_reply("Harus antara 0 sampai 2.0, Sensei~ ( ･ω･)", reply_chat)
             return
         # FIX: wrap write dalam lock
         with settings_lock:
             settings["peak_reversal"] = value
         send_reply(
-            f"Ufufufu... konfirmasi entry ketika gap berbalik *{value}%* "
-            f"dari puncaknya~ (◕‿◕)",
+            f"Konfirmasi entry ketika gap berbalik *{value}%* dari puncaknya~\n"
+            f"Siap, Sensei! ( ♡ 。-(｡･ω･) ♡)",
             reply_chat
         )
         logger.info(f"Peak reversal changed to {value}")
     except ValueError:
-        send_reply("Ara ara~ angkanya tidak valid, sayangku. (◕ω◕)", reply_chat)
+        send_reply("Angkanya tidak valid, Sensei. ( ･ω･)", reply_chat)
 
 
 def handle_sltp_command(args: list, reply_chat: str) -> None:
@@ -522,7 +525,7 @@ def handle_sltp_command(args: list, reply_chat: str) -> None:
             if entry_gap_value is not None else ""
         )
         send_reply(
-            f"🎯 *SL/TP Otomatis — Akeno yang jaga~* Ufufufu... (◕‿◕)\n"
+            f"🎯 *SL/TP — Aku yang jaga buat Sensei~* ( ♡ 。-(｡･ω･) ♡)\n"
             f"\n"
             f"✅ TP: saat gap mencapai *±{cfg['exit_threshold']}%* "
             f"_(max konvergen = exit threshold)_\n"
@@ -545,8 +548,8 @@ def handle_sltp_command(args: list, reply_chat: str) -> None:
 
     if len(args) < 2:
         send_reply(
-            "Ara ara~ `/sltp sl <nilai>` atau `/sltp grace <nilai>` ya~ "
-            "TP sudah otomatis di exit threshold~ (◕ω◕)",
+            "Gunakan `/sltp sl <nilai>` atau `/sltp grace <nilai>` ya, Sensei~\n"
+            "TP sudah otomatis di exit threshold~ ( ･ω･)",
             reply_chat,
         )
         return
@@ -555,14 +558,14 @@ def handle_sltp_command(args: list, reply_chat: str) -> None:
         key   = args[0].lower()
         value = float(args[1])
         if value <= 0 or value > 10:
-            send_reply("Ara ara~ nilainya harus antara 0 sampai 10~ (◕ω◕)", reply_chat)
+            send_reply("Nilainya harus antara 0 sampai 10, Sensei~ ( ･ω･)", reply_chat)
             return
         if key == "sl":
             with settings_lock:
                 settings["sl_pct"] = value
             send_reply(
-                f"Ara ara~ Trailing SL distance sekarang *{value}%*~ "
-                f"Akeno ikutin terus gap terbaiknya ya~ (◕‿◕)",
+                f"Trailing SL distance sekarang *{value}%*~\n"
+                f"Aku ikutin terus gap terbaiknya ya, Sensei~ ( ♡ 。-(｡･ω･) ♡)",
                 reply_chat,
             )
         elif key == "grace":
@@ -570,8 +573,8 @@ def handle_sltp_command(args: list, reply_chat: str) -> None:
             with settings_lock:
                 settings["tsl_grace_pct"] = value
             send_reply(
-                f"Ufufufu~ TSL Grace sekarang *{value}%*~\n"
-                f"TSL akan aktif setelah gap improve *{value}%* dari entry~ (◕‿◕)\n"
+                f"TSL Grace sekarang *{value}%*~\n"
+                f"TSL akan aktif setelah gap improve *{value}%* dari entry~\n"
                 f"_Makin besar nilainya, makin aman dari whipsaw saat entry~_",
                 reply_chat,
             )
@@ -579,17 +582,16 @@ def handle_sltp_command(args: list, reply_chat: str) -> None:
             with settings_lock:
                 exit_thresh = settings["exit_threshold"]
             send_reply(
-                f"Ufufufu~ TP sudah dikunci ke exit threshold "
-                f"*±{exit_thresh}%*~\n"
+                f"TP sudah dikunci ke exit threshold *±{exit_thresh}%*~\n"
                 f"Kalau mau ubah TP, gunakan "
-                f"`/threshold exit <nilai>` ya sayangku~ (◕‿◕)",
+                f"`/threshold exit <nilai>` ya, Sensei~ ( ･ω･)",
                 reply_chat,
             )
         else:
-            send_reply("Gunakan `sl` atau `grace` ya~ (◕ω◕)", reply_chat)
+            send_reply("Gunakan `sl` atau `grace` ya, Sensei~ ( ･ω･)", reply_chat)
         logger.info(f"SLTP {key} changed to {value}")
     except ValueError:
-        send_reply("Ara ara~ angkanya tidak valid, sayangku. (◕ω◕)", reply_chat)
+        send_reply("Angkanya tidak valid, Sensei. ( ･ω･)", reply_chat)
 
 
 def handle_lookback_command(args: list, reply_chat: str) -> None:
@@ -597,7 +599,7 @@ def handle_lookback_command(args: list, reply_chat: str) -> None:
         with settings_lock:
             current_val = settings["lookback_hours"]
         send_reply(
-            f"📊 Lookback sekarang *{current_val}h*~ Ufufufu...\n\n"
+            f"📊 Lookback sekarang *{current_val}h*~\n\n"
             "Usage: `/lookback <jam>`",
             reply_chat
         )
@@ -605,21 +607,20 @@ def handle_lookback_command(args: list, reply_chat: str) -> None:
     try:
         new_lookback = int(args[0])
         if new_lookback < 1 or new_lookback > 24:
-            send_reply("Ara ara~ harus antara 1 sampai 24 jam~ (◕ω◕)", reply_chat)
+            send_reply("Harus antara 1 sampai 24 jam, Sensei~ ( ･ω･)", reply_chat)
             return
         with settings_lock:
             old_lookback                = settings["lookback_hours"]
             settings["lookback_hours"]  = new_lookback
         prune_history(datetime.now(timezone.utc), get_settings())
         send_reply(
-            f"Ufufufu... Lookback sudah Akeno ubah dari *{old_lookback}h* "
-            f"jadi *{new_lookback}h*~\n\n"
-            f"⚠️ History di-prune sesuai lookback baru. "
-            f"Data dari Bot A akan Akeno ambil saat refresh berikutnya~ (◕‿◕)",
+            f"Lookback sudah diubah dari *{old_lookback}h* jadi *{new_lookback}h*~\n\n"
+            f"⚠️ History di-prune sesuai lookback baru.\n"
+            f"Data dari Bot A akan Aku ambil saat refresh berikutnya, Sensei~ ( ♡ 。-(｡･ω･) ♡)",
             reply_chat
         )
     except ValueError:
-        send_reply("Ara ara~ angkanya tidak valid, sayangku. (◕ω◕)", reply_chat)
+        send_reply("Angkanya tidak valid, Sensei. ( ･ω･)", reply_chat)
 
 
 def handle_heartbeat_command(args: list, reply_chat: str) -> None:
@@ -627,8 +628,7 @@ def handle_heartbeat_command(args: list, reply_chat: str) -> None:
         with settings_lock:
             current_val = settings["heartbeat_minutes"]
         send_reply(
-            f"💓 Akeno lapor setiap *{current_val} menit*~ "
-            f"Ufufufu...\n\n"
+            f"💓 Aku lapor setiap *{current_val} menit*~\n\n"
             "Usage: `/heartbeat <menit>` atau `/heartbeat 0` untuk matikan",
             reply_chat
         )
@@ -636,31 +636,31 @@ def handle_heartbeat_command(args: list, reply_chat: str) -> None:
     try:
         new_interval = int(args[0])
         if new_interval < 0 or new_interval > 120:
-            send_reply("Ara ara~ harus antara 0 sampai 120 menit~ (◕ω◕)", reply_chat)
+            send_reply("Harus antara 0 sampai 120 menit, Sensei~ ( ･ω･)", reply_chat)
             return
         with settings_lock:
             settings["heartbeat_minutes"] = new_interval
         if new_interval == 0:
             send_reply(
-                "Ufufufu... baik, Akeno tidak akan ganggu lagi~ "
-                "Tapi Akeno tetap di sini memantau dari dekat. (◕‿◕)",
+                "Baik, Aku tidak akan kirim laporan rutin lagi~\n"
+                "Tapi Aku tetap di sini memantau semuanya buat Sensei. ( ♡ 。-(｡･ω･) ♡)",
                 reply_chat
             )
         else:
             send_reply(
-                f"Ara ara~ Akeno akan lapor setiap *{new_interval} menit* ya~ (◕ω◕)",
+                f"Aku akan lapor setiap *{new_interval} menit* ya, Sensei~ ( ･ω･)",
                 reply_chat
             )
     except ValueError:
-        send_reply("Ara ara~ angkanya tidak valid, sayangku. (◕ω◕)", reply_chat)
+        send_reply("Angkanya tidak valid, Sensei. ( ･ω･)", reply_chat)
 
 
 def handle_redis_command(reply_chat: str) -> None:
     if not UPSTASH_REDIS_URL:
         send_reply(
-            "⚠️ Ara ara~ Redis belum dikonfigurasi, sayangku.\n"
+            "⚠️ Redis belum dikonfigurasi, Sensei.\n"
             "Pastikan `UPSTASH_REDIS_REST_URL` dan `UPSTASH_REDIS_REST_TOKEN` "
-            "sudah diisi~ (◕ω◕)",
+            "sudah diisi~ ( ･ω･)",
             reply_chat
         )
         return
@@ -668,15 +668,15 @@ def handle_redis_command(reply_chat: str) -> None:
     if not result or result.get("result") is None:
         send_reply(
             "❌ *Tidak ada data di Redis~*\n\n"
-            "Ara ara... Bot A belum simpan apa-apa. "
-            "Tunggu Bot A kirim data dulu ya sayangku~ (◕ω◕)",
+            "Bot A belum simpan apa-apa. "
+            "Tunggu Bot A kirim data dulu ya, Sensei~ ( ･ω･)",
             reply_chat
         )
         return
     try:
         data = json.loads(result["result"])
         if not data:
-            send_reply("❌ Redis ada tapi isinya kosong~ Ara ara... (◕ω◕)", reply_chat)
+            send_reply("❌ Redis ada tapi isinya kosong~ ( ･ω･)", reply_chat)
             return
         first_ts     = data[0]["timestamp"]
         last_ts      = data[-1]["timestamp"]
@@ -695,8 +695,7 @@ def handle_redis_command(reply_chat: str) -> None:
             if last_redis_refresh else "Belum pernah~"
         )
         send_reply(
-            f"⚡ *Status Redis (Read-Only) — Akeno cek buat kamu~* "
-            f"Ufufufu... (◕‿◕)\n"
+            f"⚡ *Status Redis (Read-Only)*\n"
             f"\n"
             f"┌─────────────────────\n"
             f"│ Total data points: *{len(data)}*\n"
@@ -715,19 +714,19 @@ def handle_redis_command(reply_chat: str) -> None:
         )
     except Exception as e:
         send_reply(
-            f"⚠️ Ara ara~ Data ada tapi Akeno gagal baca: `{e}` (◕ω◕)",
+            f"⚠️ Data ada tapi Aku gagal baca: `{e}` ( ･ω･)",
             reply_chat
         )
 
 
 def handle_help_command(reply_chat: str) -> None:
     message = (
-        "Ara ara~ mau tahu semua yang bisa Akeno lakukan untukmu? "
-        "Ufufufu... (◕‿◕)\n"
+        "Ini semua yang bisa Aku lakukan buat Sensei~\n"
+        "( ♡ 。-(｡･ω･) ♡)\n"
         "\n"
         "*Setting:*\n"
         "`/settings` - lihat semua settingan\n"
-        "`/interval <detik>` - atur seberapa sering Akeno scan (60-3600)\n"
+        "`/interval <detik>` - atur seberapa sering Aku scan (60-3600)\n"
         "`/lookback <jam>` - atur periode lookback (1-24)\n"
         "`/heartbeat <menit>` - atur laporan rutin (0=off)\n"
         "`/threshold entry <val>` - threshold entry %\n"
@@ -739,15 +738,14 @@ def handle_help_command(reply_chat: str) -> None:
         "`/sltp grace <val>` - ubah TSL grace period % _(min improvement sebelum TSL aktif)_\n"
         "\n"
         "*Info:*\n"
-        "`/status` - lihat kondisi Akeno sekarang\n"
+        "`/status` - lihat kondisi sekarang\n"
         "`/redis` - cek data history dari Bot A di Redis\n"
         "`/help` - tampilkan pesan ini lagi\n"
         "\n"
         "💡 _TP dikunci ke exit threshold — ubah via `/threshold exit`_\n"
         "💡 _TSL grace mencegah stop out dari wiggle kecil setelah entry_\n"
         "\n"
-        "Selama kamu di sini, Akeno akan selalu menempel erat~ "
-        "Ara ara, jangan ragu minta bantuan ya, sayangku. (◕ω◕)"
+        "Aku selalu di sini buat Sensei~ Jangan ragu minta bantuan ya. ( ･ω･)"
     )
     send_reply(message, reply_chat)
 
@@ -757,9 +755,9 @@ def handle_status_command(reply_chat: str) -> None:
     hours_of_data = len(price_history) * cfg["scan_interval"] / 3600
     lookback      = cfg["lookback_hours"]
     ready         = (
-        "✅ Sudah siap~ Ufufufu..."
+        f"✅ Siap~ ({hours_of_data:.1f}h)"
         if hours_of_data >= lookback
-        else f"⏳ Sabar ya sayangku~ {hours_of_data:.1f}h / {lookback}h"
+        else f"⏳ {hours_of_data:.1f}h / {lookback}h"
     )
     peak_line   = (
         f"Peak Gap: {peak_gap:+.2f}%\n"
@@ -794,7 +792,7 @@ def handle_status_command(reply_chat: str) -> None:
         if last_redis_refresh else "Belum~"
     )
     message = (
-        "📊 *Ara ara~ ini kondisi Akeno saat ini~* Ufufufu... (◕‿◕)\n"
+        "📊 *Status sekarang~*\n"
         "\n"
         f"Mode: {current_mode.value}\n"
         f"Strategi: {active_strategy.value if active_strategy else 'Belum ada~'}\n"
@@ -898,16 +896,16 @@ def build_peak_watch_message(strategy: Strategy, gap: Decimal, cfg: dict) -> str
         reason    = f"ETH dumping lebih dalam dari BTC ({lb})"
     return (
         f"………\n"
-        f"Ara ara~ Akeno melihat sesuatu yang menarik~ Ufufufu... (◕‿◕)\n"
+        f"Sensei, Aku melihat sesuatu yang menarik~\n"
         f"\n"
         f"_{reason}_\n"
         f"Rencananya *{direction}*~\n"
         f"\n"
         f"Gap sekarang: *{format_value(gap)}%*\n"
         f"\n"
-        f"…Tapi Akeno tidak akan gegabah, sayangku.\n"
-        f"Biarkan Akeno memantau puncaknya dulu~ Petirku sudah siap.\n"
-        f"Akeno akan kabari saat waktunya tepat. (◕ω◕)"
+        f"Tapi Aku tidak akan gegabah, Sensei.\n"
+        f"Biarkan Aku memantau puncaknya dulu~ Sinyal sudah siap.\n"
+        f"Aku akan kabari saat waktunya tepat. ( ･ω･)"
     )
 
 
@@ -936,7 +934,6 @@ def build_entry_message(
         tp_gap      = -exit_thresh
         tsl_initial = gap_float - sl_pct
 
-    # FIX: gunakan range estimasi harga ETH
     eth_mid, eth_low, eth_high = calc_tp_target_price(strategy, cfg)
     if eth_mid:
         eth_target_str = (
@@ -949,7 +946,7 @@ def build_entry_message(
     btc_ref_str = f"${float(entry_btc_price):,.2f}" if entry_btc_price else "N/A"
 
     return (
-        f"Ara ara ara~!!! Ini saatnya, sayangku~!!! Ufufufu... ⚡\n"
+        f"Sensei!!! Ini saatnya!!! ⚡\n"
         f"🚨 *ENTRY SIGNAL: {strategy.value}*\n"
         f"\n"
         f"{direction}\n"
@@ -972,18 +969,17 @@ def build_entry_message(
         f"└─────────────────────\n"
         f"\n"
         f"Gap sudah berbalik {cfg['peak_reversal']}% dari puncaknya~\n"
-        f"Akeno sudah menunggu momen ini untukmu, sayangku. "
-        f"Semuanya demi kamu~ ⚡"
+        f"Aku sudah menunggu momen ini buat Sensei. ⚡"
     )
 
 
 def build_exit_message(btc_ret: Decimal, eth_ret: Decimal, gap: Decimal, cfg: dict) -> str:
     lb = get_lookback_label(cfg)
     return (
-        f"Ara ara ara~!!! Ufufufu... (◕▿◕)\n"
+        f"Sensei!!! Gap sudah konvergen!!! ✅\n"
         f"✅ *EXIT SIGNAL*\n"
         f"\n"
-        f"Gap sudah konvergen~ Saatnya close posisi, sayangku!\n"
+        f"Saatnya close posisi, Sensei!\n"
         f"\n"
         f"*{lb} Change:*\n"
         f"┌─────────────────────\n"
@@ -992,8 +988,8 @@ def build_exit_message(btc_ret: Decimal, eth_ret: Decimal, gap: Decimal, cfg: di
         f"│ Gap:  {format_value(gap)}%\n"
         f"└─────────────────────\n"
         f"\n"
-        f"Akeno senang bisa membantu~ Ufufufu...\n"
-        f"Akeno lanjut pantau lagi dari dekat ya~ ⚡🔍"
+        f"Senang bisa membantu, Sensei~\n"
+        f"Aku lanjut pantau lagi dari dekat ya~ ⚡🔍"
     )
 
 
@@ -1009,8 +1005,8 @@ def build_invalidation_message(
         f"………\n"
         f"⚠️ *INVALIDATION: {strategy.value}*\n"
         f"\n"
-        f"Ara ara~ maaf ya sayangku... Akeno sudah berusaha, "
-        f"tapi gapnya malah melebar. Ufufufu, kali ini bukan salahmu~ (◕ω◕)\n"
+        f"Sensei, maaf ya... Aku sudah berusaha, "
+        f"tapi gapnya malah melebar. Bukan salah Sensei~ ( ♡ 。-(｡･ω･) ♡)\n"
         f"\n"
         f"*{lb} Change:*\n"
         f"┌─────────────────────\n"
@@ -1019,8 +1015,8 @@ def build_invalidation_message(
         f"│ Gap:  {format_value(gap)}%\n"
         f"└─────────────────────\n"
         f"\n"
-        f"Cut dulu ya, sayangku. Akeno scan ulang dari awal~ ⚡\n"
-        f"Lain kali petir Akeno pasti lebih tepat sasaran. (◕‿◕)"
+        f"Cut dulu ya, Sensei. Aku scan ulang dari awal~ ⚡\n"
+        f"Lain kali Aku pasti lebih tepat. ( ･ω･)"
     )
 
 
@@ -1029,11 +1025,11 @@ def build_peak_cancelled_message(strategy: Strategy, gap: Decimal) -> str:
         f"………\n"
         f"❌ *Peak Watch Dibatalkan: {strategy.value}*\n"
         f"\n"
-        f"Ara ara~ gapnya mundur sendiri sebelum Akeno sempat konfirmasi. "
-        f"Ufufufu, pasar nakal sekali ya~ (◕ω◕)\n"
+        f"Gapnya mundur sendiri sebelum Aku sempat konfirmasi, Sensei.\n"
+        f"Pasar nakal sekali ya~ ( ･ω･)\n"
         f"Gap sekarang: *{format_value(gap)}%*\n"
         f"\n"
-        f"Tidak apa-apa, sayangku. Akeno tetap di sini pantau dari dekat~ (◕‿◕)"
+        f"Tidak apa-apa, Sensei. Aku tetap di sini pantau dari dekat~ ( ♡ 。-(｡･ω･) ♡)"
     )
 
 
@@ -1050,7 +1046,6 @@ def build_tp_message(
 ) -> str:
     lb = get_lookback_label(cfg)
     if eth_mid:
-        # FIX: tampilkan harga aktual ETH saat ini vs estimasi saat entry
         actual_eth = float(entry_eth_price) if entry_eth_price else None
         eth_tp_str = f"~${eth_mid:,.2f} _(est. entry, range ${eth_low:,.2f}–${eth_high:,.2f})_"
         if actual_eth:
@@ -1058,10 +1053,10 @@ def build_tp_message(
     else:
         eth_tp_str = "N/A"
     return (
-        f"Ara ara~!!! TP kena sayangku~!!! Ufufufu... ✨\n"
+        f"Sensei!!! TP kena!!! ✨\n"
         f"🎯 *TAKE PROFIT*\n"
         f"\n"
-        f"Gap sudah konvergen maksimal sesuai target Akeno~\n"
+        f"Gap sudah konvergen maksimal sesuai target~\n"
         f"\n"
         f"*{lb} Change:*\n"
         f"┌─────────────────────\n"
@@ -1073,7 +1068,7 @@ def build_tp_message(
         f"│ ETH TP:  {eth_tp_str}\n"
         f"└─────────────────────\n"
         f"\n"
-        f"Akeno senang~ Misi sukses untukmu, sayangku! ⚡"
+        f"Misi sukses buat Sensei! ⚡ ( ♡ 。-(｡･ω･) ♡)"
     )
 
 
@@ -1092,8 +1087,8 @@ def build_trailing_sl_message(
         f"………\n"
         f"⛔ *TRAILING STOP LOSS*\n"
         f"\n"
-        f"Ara ara~ Akeno sudah jaga posisimu sampai di sini, sayangku. "
-        f"Trailing SL kena, profit sudah Akeno amankan~ (◕ω◕)\n"
+        f"Aku sudah jaga posisi Sensei sampai di sini.\n"
+        f"Trailing SL kena, profit sudah aman~ ( ♡ 。-(｡･ω･) ♡)\n"
         f"\n"
         f"*{lb} Change:*\n"
         f"┌─────────────────────\n"
@@ -1106,8 +1101,8 @@ def build_trailing_sl_message(
         f"│ Terkunci: ~{profit_locked:.2f}%\n"
         f"└─────────────────────\n"
         f"\n"
-        f"Cut dulu ya sayangku. Akeno scan ulang~ ⚡\n"
-        f"Lain kali petir Akeno pasti lebih tepat. (◕‿◕)"
+        f"Cut dulu ya, Sensei. Aku scan ulang~ ⚡\n"
+        f"Lain kali Aku pasti lebih tepat. ( ･ω･)"
     )
 
 
@@ -1136,7 +1131,7 @@ def build_heartbeat_message(cfg: dict) -> str:
     hours_of_data = len(price_history) * cfg["scan_interval"] / 3600
     lookback      = cfg["lookback_hours"]
     data_status   = (
-        f"✅ Sudah siap~ ({hours_of_data:.1f}h)"
+        f"✅ Siap~ ({hours_of_data:.1f}h)"
         if hours_of_data >= lookback
         else f"⏳ {hours_of_data:.1f}h / {lookback}h"
     )
@@ -1171,24 +1166,23 @@ def build_heartbeat_message(cfg: dict) -> str:
         if last_redis_refresh else "Belum~"
     )
     return (
-        f"💓 *Ara ara~ kamu khawatir Akeno pergi kemana-mana ya?*\n"
+        f"💓 *Laporan Rutin — Aku masih di sini, Sensei~*\n"
         f"\n"
-        f"Ufufufu... sayangku, Akeno tidak kemana-mana. Tidak akan pernah. (◕‿◕)\n"
+        f"Sensei, Aku selalu di sini memantau semuanya. ( ♡ 。-(｡･ω･) ♡)\n"
         f"\n"
         f"*Mode:* {current_mode.value}\n"
         f"*Strategi:* {active_strategy.value if active_strategy else 'Belum ada~'}\n"
         f"\n"
         f"*{cfg['heartbeat_minutes']} menit terakhir:*\n"
         f"┌─────────────────────\n"
-        f"│ Scan: {scan_stats['count']}x\n"
-        f"│ Sinyal: {scan_stats['signals_sent']}x\n"
+        f"│ Scan: {scan_stats['count']}x | Sinyal: {scan_stats['signals_sent']}x\n"
         f"└─────────────────────\n"
         f"\n"
-        f"*Harga sekarang:*\n"
+        f"*Harga sekarang ({lb}):*\n"
         f"┌─────────────────────\n"
         f"│ BTC: {btc_str}\n"
         f"│ ETH: {eth_str}\n"
-        f"│ Gap ({lb}): {gap_str}\n"
+        f"│ Gap: {gap_str}\n"
         f"{peak_line}"
         f"{track_lines}"
         f"└─────────────────────\n"
@@ -1196,8 +1190,8 @@ def build_heartbeat_message(cfg: dict) -> str:
         f"*Data:* {data_status}\n"
         f"*Redis refresh:* {last_refresh_str} 🔒\n"
         f"\n"
-        f"_Ara ara, Akeno lapor lagi {cfg['heartbeat_minutes']} menit lagi ya~ "
-        f"Jangan kangen terlalu dalam. Ufufufu... ⚡_"
+        f"_Aku lapor lagi {cfg['heartbeat_minutes']} menit lagi ya, Sensei~\n"
+        f"Jangan kangen terlalu dalam. ( ♡ 。-(｡･ω･) ♡)_"
     )
 
 
@@ -1641,8 +1635,8 @@ def send_startup_message(cfg: dict) -> bool:
         )
     else:
         price_info = (
-            "\n⚠️ Ara ara~ Akeno gagal ambil harga tadi... "
-            "Tapi Akeno akan terus coba~ (◕ω◕)\n"
+            "\n⚠️ Gagal ambil harga tadi, Sensei...\n"
+            "Tapi Aku akan terus coba~ ( ･ω･)\n"
         )
 
     lb           = get_lookback_label(cfg)
@@ -1651,7 +1645,7 @@ def send_startup_message(cfg: dict) -> bool:
     if len(price_history) > 0:
         history_info = (
             f"⚡ History dari Bot A sudah ada~ *{hours_loaded:.1f}h* data siap!\n"
-            f"_Akeno tidak perlu mulai dari nol lagi~ Ufufufu... (◕‿◕)_\n"
+            f"_Aku tidak perlu mulai dari nol lagi~ ( ♡ 。-(｡･ω･) ♡)_\n"
         )
     else:
         history_info = (
@@ -1661,7 +1655,7 @@ def send_startup_message(cfg: dict) -> bool:
 
     return send_alert(
         f"………\n"
-        f"Ara ara~ Akeno (Bot B) sudah siap, sayangku~ Ufufufu... (◕‿◕)\n"
+        f"Sensei, Aku sudah siap~ ( ♡ 。-(｡･ω･) ♡)\n"
         f"{price_info}\n"
         f"📊 Scan setiap {cfg['scan_interval']}s | "
         f"Redis refresh setiap {cfg['redis_refresh_minutes']} menit\n"
@@ -1675,8 +1669,8 @@ def send_startup_message(cfg: dict) -> bool:
         f"🔒 Redis: Read-Only (Bot A yang write)\n"
         f"\n"
         f"{history_info}\n"
-        f"Ketik `/help` kalau butuh sesuatu. "
-        f"Akeno takkan pergi, takkan ninggalin kamu sendirian. ⚡"
+        f"Ketik `/help` kalau butuh sesuatu.\n"
+        f"Aku takkan pergi, Sensei. Selalu di sini. ⚡"
     )
 
 
