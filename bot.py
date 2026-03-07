@@ -147,7 +147,7 @@ PAIR_CONFIGS: List[PairConfig] = [
         name          = "BTC/ETH",
         stable_sym    = "BTC",
         volatile_sym  = "ETH",
-        redis_key     = "monk_bot:price_history:btc_eth",
+        redis_key     = "monkbot:pricehistory",
         s1_direction  = "Long BTC / Short ETH",
         s2_direction  = "Long ETH / Short BTC",
         s1_reason     = "ETH lebih volatile dari BTC — pumped lebih kencang",
@@ -250,14 +250,19 @@ def load_pair_history(ps: PairState) -> None:
             logger.info(f"[{ps.cfg.name}] No history in Redis yet")
             return
         data = json.loads(result["result"])
-        ps.price_history = [
-            PricePoint(
-                timestamp=datetime.fromisoformat(p["timestamp"]),
-                stable=Decimal(p["stable"]),
-                volatile=Decimal(p["volatile"]),
-            )
-            for p in data
-        ]
+        cfg  = ps.cfg
+        def parse_point(p):
+            ts = datetime.fromisoformat(p["timestamp"])
+            # Support both new format {stable/volatile} and old Bot A format {btc/eth/sol/bnb}
+            if "stable" in p and "volatile" in p:
+                return PricePoint(ts, Decimal(p["stable"]), Decimal(p["volatile"]))
+            # Old format — map by symbol name
+            stable_val   = p.get(cfg.stable_sym.lower())
+            volatile_val = p.get(cfg.volatile_sym.lower())
+            if stable_val and volatile_val:
+                return PricePoint(ts, Decimal(stable_val), Decimal(volatile_val))
+            return None
+        ps.price_history = [pt for p in data if (pt := parse_point(p)) is not None]
         logger.info(
             f"[{ps.cfg.name}] Loaded {len(ps.price_history)} points from Redis"
         )
