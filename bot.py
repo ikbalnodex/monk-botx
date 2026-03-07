@@ -251,18 +251,21 @@ def load_pair_history(ps: PairState) -> None:
             return
         data = json.loads(result["result"])
         cfg  = ps.cfg
-        def parse_point(p):
-            ts = datetime.fromisoformat(p["timestamp"])
-            # Support both new format {stable/volatile} and old Bot A format {btc/eth/sol/bnb}
-            if "stable" in p and "volatile" in p:
-                return PricePoint(ts, Decimal(p["stable"]), Decimal(p["volatile"]))
-            # Old format — map by symbol name
-            stable_val   = p.get(cfg.stable_sym.lower())
-            volatile_val = p.get(cfg.volatile_sym.lower())
-            if stable_val and volatile_val:
-                return PricePoint(ts, Decimal(stable_val), Decimal(volatile_val))
-            return None
-        ps.price_history = [pt for p in data if (pt := parse_point(p)) is not None]
+        parsed = []
+        for p in data:
+            try:
+                ts = datetime.fromisoformat(p["timestamp"])
+                if "stable" in p and "volatile" in p:
+                    parsed.append(PricePoint(ts, Decimal(p["stable"]), Decimal(p["volatile"])))
+                else:
+                    stable_val   = p.get(cfg.stable_sym.lower())
+                    volatile_val = p.get(cfg.volatile_sym.lower())
+                    if stable_val and volatile_val:
+                        parsed.append(PricePoint(ts, Decimal(stable_val), Decimal(volatile_val)))
+            except Exception as parse_err:
+                logger.debug(f"[{ps.cfg.name}] Skip point: {parse_err}")
+                continue
+        ps.price_history = parsed
         logger.info(
             f"[{ps.cfg.name}] Loaded {len(ps.price_history)} points from Redis"
         )
