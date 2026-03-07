@@ -34,6 +34,8 @@ from typing import Dict, List, Optional, Tuple, NamedTuple
 
 import requests
 
+import os
+
 from config import (
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
@@ -44,10 +46,12 @@ from config import (
     ENTRY_THRESHOLD,
     EXIT_THRESHOLD,
     INVALIDATION_THRESHOLD,
-    UPSTASH_REDIS_REST_URL as UPSTASH_REDIS_URL,
-    UPSTASH_REDIS_REST_TOKEN as UPSTASH_REDIS_TOKEN,
     logger,
 )
+
+# Redis dibaca langsung dari env — tidak perlu ada di config.py
+UPSTASH_REDIS_URL   = os.environ.get("UPSTASH_REDIS_REST_URL", "")
+UPSTASH_REDIS_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN", "")
 
 
 # =============================================================================
